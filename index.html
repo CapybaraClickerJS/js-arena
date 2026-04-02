@@ -57,6 +57,10 @@
         .auth-box { background: var(--card); padding: 30px; border-radius: 20px; width: 100%; max-width: 380px; margin: 50px auto; box-sizing: border-box; }
         input { width: 100%; padding: 14px; margin: 10px 0; background: #0f172a; border: 1px solid #334155; border-radius: 10px; color: white; box-sizing: border-box; }
         
+        footer { margin-top: auto; padding: 30px 0; width: 100%; text-align: center; border-top: 1px solid #1e293b; }
+        .privacy-link { color: #64748b; text-decoration: none; font-size: 0.8rem; transition: 0.2s; }
+        .privacy-link:hover { color: var(--accent); text-decoration: underline; }
+
         @media (max-width: 480px) { .games-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
@@ -191,6 +195,11 @@
 
         </div>
     </section>
+
+    <footer>
+        <a href="https://js-arena-v2-politica-de-privacidade.vercel.app" target="_blank" class="privacy-link">Política de Privacidade</a>
+        <p style="font-size: 0.7rem; color: #475569; margin-top: 10px;">© 2026 JS GAME BRAZIL</p>
+    </footer>
 
     <script>
         function handleAuth() {
