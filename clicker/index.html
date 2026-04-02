@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JS Coin Clicker | JS Arena</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --gold: #fcc419;
+            --gold-dark: #f08c00;
+            --text: #f8fafc;
+            --accent: #3b82f6;
+        }
+
+        body {
+            margin: 0; background: var(--bg); color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        nav {
+            width: 100%; max-width: 500px; display: flex; 
+            justify-content: space-between; align-items: center; padding: 20px;
+        }
+
+        .back-btn {
+            background: #334155; color: white; text-decoration: none;
+            padding: 8px 16px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;
+        }
+
+        .stats-container {
+            text-align: center; margin-top: 10px;
+        }
+
+        .coin-display {
+            font-size: 2.5rem; font-weight: 900; color: var(--gold);
+            text-shadow: 0 0 15px rgba(252, 196, 25, 0.3);
+        }
+
+        .cps-display { color: #94a3b8; font-size: 1rem; }
+
+        .click-area {
+            margin: 40px 0; position: relative; cursor: pointer;
+        }
+
+        .main-coin {
+            width: 200px; height: 200px;
+            background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+            border-radius: 50%; border: 8px solid #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 5rem; box-shadow: 0 0 30px rgba(240, 140, 0, 0.4);
+            transition: transform 0.05s; user-select: none;
+        }
+
+        .main-coin:active { transform: scale(0.92); }
+
+        .shop-container {
+            width: 90%; max-width: 400px; background: var(--card);
+            border-radius: 20px; padding: 20px; box-sizing: border-box;
+            margin-bottom: 30px;
+        }
+
+        .upgrade {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0,0,0,0.2); padding: 12px;
+            border-radius: 12px; margin-bottom: 10px;
+            border: 1px solid #334155; transition: 0.2s;
+        }
+
+        .upgrade.disabled { opacity: 0.5; pointer-events: none; }
+        .upgrade:not(.disabled):active { background: var(--accent); }
+
+        .upgrade-info h4 { margin: 0; font-size: 1rem; }
+        .upgrade-info p { margin: 2px 0 0; font-size: 0.8rem; color: #94a3b8; }
+
+        .price { font-weight: bold; color: var(--gold); }
+
+        /* Efeito de subir número ao clicar */
+        .float-text {
+            position: absolute; color: var(--gold); font-weight: bold;
+            pointer-events: none; animation: floatUp 0.8s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-100px); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="../index.html" class="back-btn">← Sair</a>
+        <h2 style="margin:0; font-size: 1.2rem;">JS Coin Clicker</h2>
+        <div style="width: 50px;"></div>
+    </nav>
+
+    <div class="stats-container">
+        <div class="coin-display" id="coin-count">0</div>
+        <div class="cps-display">Moedas por segundo: <span id="cps-count">0</span></div>
+    </div>
+
+    <div class="click-area" id="click-btn">
+        <div class="main-coin">JS</div>
+    </div>
+
+    <div class="shop-container">
+        <h3 style="margin-top: 0;">Loja de Upgrades</h3>
+        
+        <div class="upgrade disabled" id="upgrade-click">
+            <div class="upgrade-info">
+                <h4>Super Clique</h4>
+                <p>+1 por clique</p>
+            </div>
+            <div class="price" id="price-click">15</div>
+        </div>
+
+        <div class="upgrade disabled" id="upgrade-auto">
+            <div class="upgrade-info">
+                <h4>Robô Clicador</h4>
+                <p>+1 por segundo</p>
+            </div>
+            <div class="price" id="price-auto">50</div>
+        </div>
+
+        <div class="upgrade disabled" id="upgrade-farm">
+            <div class="upgrade-info">
+                <h4>Fazenda JS</h4>
+                <p>+10 por segundo</p>
+            </div>
+            <div class="price" id="price-farm">500</div>
+        </div>
+
+        <button onclick="resetGame()" style="background:none; border:none; color:#64748b; font-size:0.7rem; width:100%; margin-top:10px; cursor:pointer;">Reiniciar Progresso</button>
+    </div>
+
+    <script>
+        let coins = parseFloat(localStorage.getItem('js_clicker_coins')) || 0;
+        let clickPower = parseInt(localStorage.getItem('js_clicker_power')) || 1;
+        let autoRate = parseFloat(localStorage.getItem('js_clicker_auto')) || 0;
+
+        let prices = {
+            click: parseInt(localStorage.getItem('js_clicker_p_click')) || 15,
+            auto: parseInt(localStorage.getItem('js_clicker_p_auto')) || 50,
+            farm: parseInt(localStorage.getItem('js_clicker_p_farm')) || 500
+        };
+
+        const coinEl = document.getElementById('coin-count');
+        const cpsEl = document.getElementById('cps-count');
+
+        function updateUI() {
+            coinEl.innerText = Math.floor(coins).toLocaleString();
+            cpsEl.innerText = autoRate.toFixed(1);
+            
+            checkUpgrade('upgrade-click', prices.click);
+            checkUpgrade('upgrade-auto', prices.auto);
+            checkUpgrade('upgrade-farm', prices.farm);
+            
+            document.getElementById('price-click').innerText = prices.click;
+            document.getElementById('price-auto').innerText = prices.auto;
+            document.getElementById('price-farm').innerText = prices.farm;
+        }
+
+        function checkUpgrade(id, price) {
+            const el = document.getElementById(id);
+            if (coins >= price) el.classList.remove('disabled');
+            else el.classList.add('disabled');
+        }
+
+        function saveGame() {
+            localStorage.setItem('js_clicker_coins', coins);
+            localStorage.setItem('js_clicker_power', clickPower);
+            localStorage.setItem('js_clicker_auto', autoRate);
+            localStorage.setItem('js_clicker_p_click', prices.click);
+            localStorage.setItem('js_clicker_p_auto', prices.auto);
+            localStorage.setItem('js_clicker_p_farm', prices.farm);
+        }
+
+        document.getElementById('click-btn').addEventListener('click', (e) => {
+            coins += clickPower;
+            createFloatText(e, `+${clickPower}`);
+            updateUI();
+        });
+
+        function createFloatText(e, text) {
+            const span = document.createElement('span');
+            span.className = 'float-text';
+            span.innerText = text;
+            span.style.left = `${e.clientX - 20}px`;
+            span.style.top = `${e.clientY - 20}px`;
+            document.body.appendChild(span);
+            setTimeout(() => span.remove(), 800);
+        }
+
+        document.getElementById('upgrade-click').addEventListener('click', () => {
+            if (coins >= prices.click) {
+                coins -= prices.click;
+                clickPower++;
+                prices.click = Math.floor(prices.click * 1.5);
+                updateUI();
+            }
+        });
+
+        document.getElementById('upgrade-auto').addEventListener('click', () => {
+            if (coins >= prices.auto) {
+                coins -= prices.auto;
+                autoRate += 1;
+                prices.auto = Math.floor(prices.auto * 1.3);
+                updateUI();
+            }
+        });
+
+        document.getElementById('upgrade-farm').addEventListener('click', () => {
+            if (coins >= prices.farm) {
+                coins -= prices.farm;
+                autoRate += 10;
+                prices.farm = Math.floor(prices.farm * 1.4);
+                updateUI();
+            }
+        });
+
+        function resetGame() {
+            if(confirm("Deseja realmente resetar suas moedas?")) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+
+        // Loop do Auto-Clicker
+        setInterval(() => {
+            if (autoRate > 0) {
+                coins += (autoRate / 10);
+                updateUI();
+            }
+        }, 100);
+
+        // Loop de Auto-Save
+        setInterval(saveGame, 5000);
+
+        updateUI();
+    </script>
+</body>
+</html>

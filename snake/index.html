@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JS Snake Sound Edition</title>
+    <style>
+        body {
+            margin: 0; background: #1a1a1a; color: white;
+            font-family: sans-serif; display: flex; flex-direction: column;
+            align-items: center; height: 100vh; overflow: hidden; touch-action: none;
+        }
+        .header {
+            width: 90%; max-width: 320px; display: flex;
+            justify-content: space-between; padding: 10px 0; font-size: 1.2rem;
+            font-weight: bold; text-shadow: 1px 1px 2px #000;
+        }
+        canvas {
+            background-color: #a2d149;
+            border: 4px solid #578a34; border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .controls {
+            margin-top: 15px; display: grid;
+            grid-template-columns: repeat(3, 65px); gap: 10px;
+        }
+        .btn {
+            background: #333; border: 2px solid #444; border-radius: 12px;
+            color: white; font-size: 1.5rem; height: 65px;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 0 #111;
+        }
+        .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #000; background: #4285F4; }
+        .up { grid-column: 2; } .left { grid-column: 1; } .right { grid-column: 3; } .down { grid-column: 2; }
+        
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 10;
+        }
+        .menu { background: #4285F4; padding: 30px; border-radius: 20px; text-align: center; border: 4px solid #fff; }
+        button { padding: 12px 25px; font-size: 1.2rem; font-weight: 900; border-radius: 50px; border: none; cursor: pointer; background: #fff; color: #4285F4; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <span>🍎 <b id="score">0</b></span>
+        <span>🏆 <b id="highScore">0</b></span>
+    </div>
+
+    <canvas id="gameCanvas" width="300" height="300"></canvas>
+
+    <div class="controls">
+        <div class="btn up" onclick="changeDir(0, -1)">▲</div>
+        <div class="btn left" onclick="changeDir(-1, 0)">◄</div>
+        <div class="btn right" onclick="changeDir(1, 0)">►</div>
+        <div class="btn down" onclick="changeDir(0, 1)">▼</div>
+    </div>
+
+    <div id="startScreen" class="overlay">
+        <div class="menu">
+            <h1 id="msg" style="margin-top:0;">JS SNAKE</h1>
+            <button onclick="startGame()">JOGAR</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const tileCount = 15;
+        const tileSize = canvas.width / tileCount;
+
+        let snake, foodX, foodY, dx, dy, score, gameLoop;
+        let highScore = localStorage.getItem("snake_high") || 0;
+        document.getElementById("highScore").innerText = highScore;
+
+        // --- SISTEMA DE SOM ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSfx(freq, type, duration, vol = 0.1) {
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                
+                // Slide de frequência para o som de morte
+                if (duration > 0.5) {
+                    osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + duration);
+                }
+
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) { console.log("Erro no áudio"); }
+        }
+
+        function startGame() {
+            // Desbloqueia o áudio no clique
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            document.getElementById("startScreen").style.display = "none";
+            snake = [{x: 7, y: 7}, {x: 6, y: 7}, {x: 5, y: 7}];
+            dx = 1; dy = 0; score = 0;
+            document.getElementById("score").innerText = score;
+            spawnFood();
+            if(gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(draw, 150);
+        }
+
+        function draw() {
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+            // Colisão
+            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount || snake.some(p => p.x === head.x && p.y === head.y)) {
+                return gameOver();
+            }
+
+            snake.unshift(head);
+
+            if (head.x === foodX && head.y === foodY) {
+                score++;
+                document.getElementById("score").innerText = score;
+                playSfx(523.25, 'square', 0.1); // Som de comer (Dó)
+                spawnFood();
+            } else {
+                snake.pop();
+            }
+
+            // Limpar fundo (Xadrez Verde)
+            for (let r = 0; r < tileCount; r++) {
+                for (let c = 0; c < tileCount; c++) {
+                    ctx.fillStyle = (r + c) % 2 === 0 ? "#a2d149" : "#aad751";
+                    ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+                }
+            }
+
+            // Comida (Maçã)
+            ctx.fillStyle = "#e7471d";
+            ctx.beginPath();
+            ctx.arc(foodX * tileSize + tileSize/2, foodY * tileSize + tileSize/2, tileSize/2.5, 0, Math.PI*2);
+            ctx.fill();
+
+            // Cobra
+            snake.forEach((p, i) => {
+                ctx.fillStyle = i === 0 ? "#2b5cbf" : "#4285F4";
+                ctx.fillRect(p.x * tileSize + 1, p.y * tileSize + 1, tileSize - 2, tileSize - 2);
+                
+                // Olhinhos na cabeça
+                if(i === 0) {
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(p.x * tileSize + 4, p.y * tileSize + 4, 4, 4);
+                    ctx.fillRect(p.x * tileSize + 12, p.y * tileSize + 4, 4, 4);
+                }
+            });
+        }
+
+        function spawnFood() {
+            foodX = Math.floor(Math.random() * tileCount);
+            foodY = Math.floor(Math.random() * tileCount);
+            if (snake.some(p => p.x === foodX && p.y === foodY)) spawnFood();
+        }
+
+        function changeDir(nx, ny) {
+            if ((nx === 1 && dx === -1) || (nx === -1 && dx === 1)) return;
+            if ((ny === 1 && dy === -1) || (ny === -1 && dy === 1)) return;
+            playSfx(150, 'sine', 0.05, 0.05); // Som de clique discreto
+            dx = nx; dy = ny;
+        }
+
+        function gameOver() {
+            clearInterval(gameLoop);
+            playSfx(150, 'sawtooth', 0.6, 0.2); // Som de batida/morte
+            
+            if(score > highScore) {
+                highScore = score;
+                localStorage.setItem("snake_high", highScore);
+                document.getElementById("highScore").innerText = highScore;
+            }
+            document.getElementById("msg").innerText = "FIM DE JOGO!";
+            document.getElementById("startScreen").style.display = "flex";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JS Tetris Retro | JS Arena</title>
+    <style>
+        body {
+            margin: 0; background: #0f172a; color: white;
+            font-family: sans-serif; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; height: 100vh; overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        nav { width: 100%; position: absolute; top: 0; padding: 15px; display: flex; justify-content: space-between; box-sizing: border-box; }
+        .back-btn { background: #334155; color: white; text-decoration: none; padding: 8px 15px; border-radius: 8px; font-weight: bold; }
+        
+        #game-container { position: relative; border: 4px solid #334155; background: #020617; line-height: 0; }
+        canvas { display: block; }
+        
+        .controls {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+            margin-top: 20px; width: 280px;
+        }
+        .btn {
+            background: #1e293b; border: 2px solid #334155; color: white; padding: 20px;
+            border-radius: 12px; font-weight: bold; font-size: 1.2rem; touch-action: manipulation;
+        }
+        .btn:active { background: #3b82f6; transform: scale(0.95); }
+        .btn-drop { background: #3b82f6; border-color: #60a5fa; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="../index.html" class="back-btn">← Sair</a>
+        <div id="score-label">Pontos: <span id="score">0</span></div>
+    </nav>
+
+    <div id="game-container">
+        <canvas id="tetris" width="240" height="400"></canvas>
+    </div>
+
+    <div class="controls">
+        <button class="btn" onclick="playerMove(-1)">◀</button>
+        <button class="btn" onclick="playerRotate(1)">🔄</button>
+        <button class="btn" onclick="playerMove(1)">▶</button>
+        <div></div>
+        <button class="btn btn-drop" onclick="playerDrop()">▼</button>
+        <div></div>
+    </div>
+
+    <script>
+        // --- SISTEMA DE SOM (Sintetizador) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(freq, type, duration, vol = 0.1) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const sounds = {
+            move: () => playSound(150, 'square', 0.05, 0.05),
+            rotate: () => playSound(400, 'triangle', 0.1),
+            drop: () => playSound(100, 'sine', 0.1, 0.2),
+            clear: () => {
+                playSound(523.25, 'square', 0.2); // C5
+                setTimeout(() => playSound(659.25, 'square', 0.3), 100); // E5
+            },
+            gameover: () => {
+                playSound(300, 'sawtooth', 0.5);
+                setTimeout(() => playSound(200, 'sawtooth', 0.5), 200);
+            }
+        };
+
+        // --- LÓGICA DO JOGO ---
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+        context.scale(20, 20);
+
+        function arenaSweep() {
+            let rowCount = 0;
+            outer: for (let y = arena.length - 1; y > 0; --y) {
+                for (let x = 0; x < arena[y].length; ++x) {
+                    if (arena[y][x] === 0) continue outer;
+                }
+                const row = arena.splice(y, 1)[0].fill(0);
+                arena.unshift(row);
+                ++y;
+                rowCount++;
+            }
+            if (rowCount > 0) {
+                score += rowCount * 10;
+                sounds.clear();
+                updateScore();
+            }
+        }
+
+        function collide(arena, player) {
+            const [m, o] = [player.matrix, player.pos];
+            for (let y = 0; y < m.length; ++y) {
+                for (let x = 0; x < m[y].length; ++x) {
+                    if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) return true;
+                }
+            }
+            return false;
+        }
+
+        function createMatrix(w, h) {
+            const matrix = [];
+            while (h--) matrix.push(new Array(w).fill(0));
+            return matrix;
+        }
+
+        function createPiece(type) {
+            if (type === 'I') return [[0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]];
+            if (type === 'L') return [[0, 2, 0], [0, 2, 0], [0, 2, 2]];
+            if (type === 'J') return [[0, 3, 0], [0, 3, 0], [3, 3, 0]];
+            if (type === 'O') return [[4, 4], [4, 4]];
+            if (type === 'Z') return [[5, 5, 0], [0, 5, 5], [0, 0, 0]];
+            if (type === 'S') return [[0, 6, 6], [6, 6, 0], [0, 0, 0]];
+            if (type === 'T') return [[0, 7, 0], [7, 7, 7], [0, 0, 0]];
+        }
+
+        function drawMatrix(matrix, offset) {
+            matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        context.fillStyle = colors[value];
+                        context.fillRect(x + offset.x, y + offset.y, 1, 1);
+                        context.strokeStyle = '#000';
+                        context.lineWidth = 0.05;
+                        context.strokeRect(x + offset.x, y + offset.y, 1, 1);
+                    }
+                });
+            });
+        }
+
+        function draw() {
+            context.fillStyle = '#020617';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            drawMatrix(arena, {x: 0, y: 0});
+            drawMatrix(player.matrix, player.pos);
+        }
+
+        function merge(arena, player) {
+            player.matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) arena[y + player.pos.y][x + player.pos.x] = value;
+                });
+            });
+        }
+
+        function rotate(matrix, dir) {
+            for (let y = 0; y < matrix.length; ++y) {
+                for (let x = 0; x < y; ++x) {
+                    [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+                }
+            }
+            if (dir > 0) matrix.forEach(row => row.reverse());
+            else matrix.reverse();
+        }
+
+        function playerDrop() {
+            player.pos.y++;
+            if (collide(arena, player)) {
+                player.pos.y--;
+                merge(arena, player);
+                sounds.drop();
+                playerReset();
+                arenaSweep();
+            }
+            dropCounter = 0;
+        }
+
+        function playerMove(offset) {
+            player.pos.x += offset;
+            if (collide(arena, player)) {
+                player.pos.x -= offset;
+            } else {
+                sounds.move();
+            }
+        }
+
+        function playerReset() {
+            const pieces = 'TJLOSZI';
+            player.matrix = createPiece(pieces[pieces.length * Math.random() | 0]);
+            player.pos.y = 0;
+            player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+            if (collide(arena, player)) {
+                sounds.gameover();
+                arena.forEach(row => row.fill(0));
+                score = 0;
+                updateScore();
+            }
+        }
+
+        function playerRotate(dir) {
+            const pos = player.pos.x;
+            let offset = 1;
+            rotate(player.matrix, dir);
+            while (collide(arena, player)) {
+                player.pos.x += offset;
+                offset = -(offset + (offset > 0 ? 1 : -1));
+                if (offset > player.matrix[0].length) {
+                    rotate(player.matrix, -dir);
+                    player.pos.x = pos;
+                    return;
+                }
+            }
+            sounds.rotate();
+        }
+
+        let dropCounter = 0;
+        let dropInterval = 1000;
+        let lastTime = 0;
+
+        function update(time = 0) {
+            const deltaTime = time - lastTime;
+            dropCounter += deltaTime;
+            if (dropCounter > dropInterval) playerDrop();
+            lastTime = time;
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function updateScore() {
+            document.getElementById('score').innerText = score;
+        }
+
+        const colors = [null, '#3b82f6', '#ef4444', '#10b981', '#facc15', '#a855f7', '#ec4899', '#f97316'];
+        const arena = createMatrix(12, 20);
+        const player = { pos: {x: 0, y: 0}, matrix: null };
+        let score = 0;
+
+        playerReset();
+        updateScore();
+        update();
+
+        // Desbloqueia áudio no mobile após primeiro toque
+        window.addEventListener('touchstart', () => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }, { once: true });
+    </script>
+</body>
+</html>

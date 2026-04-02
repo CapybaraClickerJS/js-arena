@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Block Blast JS - Fixed Vision</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --board: #1e293b;
+            --cell: #334155;
+            --primary: #22c55e;
+            --cell-size: 40px; /* Tamanho real no tabuleiro */
+            --inv-cell-size: 18px; /* Tamanho pequeno no inventário */
+        }
+
+        body {
+            margin: 0; background: var(--bg); color: white;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            height: 100vh; overflow: hidden; touch-action: none;
+            user-select: none; -webkit-user-select: none;
+        }
+
+        #score { font-size: 3rem; font-weight: 800; margin: 15px 0; color: var(--primary); }
+
+        #game-board {
+            display: grid; grid-template-columns: repeat(8, var(--cell-size));
+            grid-template-rows: repeat(8, var(--cell-size));
+            gap: 4px; background: var(--board);
+            padding: 8px; border-radius: 12px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+            position: relative;
+        }
+
+        .cell { background: var(--cell); border-radius: 4px; position: relative; }
+        .cell.preview { background: rgba(255,255,255,0.2) !important; box-shadow: inset 0 0 8px #fff; }
+
+        #shapes-container {
+            display: flex; justify-content: center; align-items: center;
+            gap: 15px; width: 100%; max-width: 400px;
+            margin-top: 30px; height: 120px;
+        }
+
+        .shape-wrapper {
+            display: flex; flex-direction: column; gap: 2px;
+            cursor: grab; min-width: 90px; height: 90px;
+            justify-content: center; align-items: center;
+            background: rgba(255,255,255,0.05); border-radius: 10px;
+        }
+
+        /* Esconde a peça original enquanto arrasta */
+        .shape-wrapper.dragging { visibility: hidden; }
+
+        .shape-row { display: flex; gap: 2px; }
+        .shape-cell { width: var(--inv-cell-size); height: var(--inv-cell-size); border-radius: 3px; }
+
+        /* O GHOST (A PEÇA QUE VOCÊ VÊ AO ARRASTAR) */
+        #drag-ghost {
+            position: fixed; pointer-events: none; display: none;
+            flex-direction: column; gap: 4px; z-index: 9999;
+            /* Ajuste de escala: 1.0 para manter o tamanho exato do tabuleiro */
+            transform: scale(1.05); 
+            opacity: 0.9;
+        }
+
+        #drag-ghost .shape-cell { 
+            width: var(--cell-size); 
+            height: var(--cell-size); 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        #game-over {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            display: none; flex-direction: column; justify-content: center;
+            align-items: center; z-index: 10000;
+        }
+
+        button {
+            background: var(--primary); border: none; padding: 15px 40px;
+            font-size: 1.2rem; font-weight: bold; border-radius: 30px;
+            cursor: pointer; color: #0f172a; margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="score">0</div>
+    <div id="game-board"></div>
+
+    <div id="shapes-container">
+        <div class="shape-wrapper" id="shape-0" data-index="0"></div>
+        <div class="shape-wrapper" id="shape-1" data-index="1"></div>
+        <div class="shape-wrapper" id="shape-2" data-index="2"></div>
+    </div>
+
+    <div id="drag-ghost"></div>
+
+    <div id="game-over">
+        <h1 style="color: #ef4444; font-size: 3rem;">GAME OVER</h1>
+        <div id="final-score" style="font-size: 1.5rem;"></div>
+        <button onclick="location.reload()">RECOMEÇAR</button>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 8;
+        let board = Array(8).fill().map(() => Array(8).fill(null));
+        let score = 0;
+        let currentShapes = [null, null, null];
+        let audioCtx;
+
+        const SHAPES = [
+            { g: [[1,1],[1,1]], c: '#f87171' }, 
+            { g: [[1,1,1,1]], c: '#60a5fa' },
+            { g: [[1,1,1],[0,1,0]], c: '#a78bfa' }, 
+            { g: [[1,1,0],[0,1,1]], c: '#fbbf24' },
+            { g: [[1,1,1],[1,0,0],[1,0,0]], c: '#f472b6' },
+            { g: [[1]], c: '#4ade80' }, 
+            { g: [[1,1]], c: '#22d3ee' },
+            { g: [[1,0],[1,1]], c: '#fb923c' }
+        ];
+
+        function play(f, t, type='sine') {
+            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+            o.type = type; o.connect(g); g.connect(audioCtx.destination);
+            o.frequency.setValueAtTime(f, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + t);
+            o.start(); o.stop(audioCtx.currentTime + t);
+        }
+
+        function initBoard() {
+            const container = document.getElementById('game-board');
+            container.innerHTML = '';
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    const div = document.createElement('div');
+                    div.className = 'cell';
+                    div.id = `c-${r}-${c}`;
+                    container.appendChild(div);
+                }
+            }
+        }
+
+        function drawBoard() {
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    const el = document.getElementById(`c-${r}-${c}`);
+                    el.style.background = board[r][c] || 'var(--cell)';
+                    el.classList.remove('preview');
+                }
+            }
+        }
+
+        function spawn() {
+            currentShapes = [0,1,2].map(() => SHAPES[Math.floor(Math.random()*SHAPES.length)]);
+            renderInv();
+        }
+
+        function renderInv() {
+            [0,1,2].forEach(i => {
+                const el = document.getElementById(`shape-${i}`);
+                el.innerHTML = ''; el.classList.remove('dragging');
+                if(!currentShapes[i]) return;
+                currentShapes[i].g.forEach(row => {
+                    const rDiv = document.createElement('div');
+                    rDiv.className = 'shape-row';
+                    row.forEach(v => {
+                        const cDiv = document.createElement('div');
+                        cDiv.className = 'shape-cell';
+                        if(v) cDiv.style.background = currentShapes[i].c;
+                        rDiv.appendChild(cDiv);
+                    });
+                    el.appendChild(rDiv);
+                });
+            });
+        }
+
+        let dragIdx = -1;
+        let ghost = document.getElementById('drag-ghost');
+
+        document.querySelectorAll('.shape-wrapper').forEach(w => {
+            w.onpointerdown = e => {
+                dragIdx = parseInt(w.dataset.index);
+                if(!currentShapes[dragIdx]) return;
+                
+                play(400, 0.1);
+                w.classList.add('dragging');
+                ghost.style.display = 'flex';
+                ghost.innerHTML = w.innerHTML;
+                
+                // Mudar as células do ghost para o tamanho do tabuleiro
+                ghost.querySelectorAll('.shape-cell').forEach(c => {
+                    if(c.style.background) {
+                        c.style.width = 'var(--cell-size)';
+                        c.style.height = 'var(--cell-size)';
+                    }
+                });
+
+                updateGhost(e);
+            };
+        });
+
+        function updateGhost(e) {
+            // OFFSET: O segredo está aqui. 
+            // -100px no Top faz a peça "pular" para cima do dedo/mouse.
+            // -80px no Left centraliza a peça horizontalmente.
+            ghost.style.left = (e.clientX - 80) + 'px';
+            ghost.style.top = (e.clientY - 110) + 'px';
+
+            // Lógica de Preview
+            drawBoard();
+            const rect = document.getElementById('game-board').getBoundingClientRect();
+            const gx = e.clientX - 20; // Ajuste para o centro da peça
+            const gy = e.clientY - 110;
+
+            if(gx > rect.left && gx < rect.right && gy > rect.top && gy < rect.bottom) {
+                const col = Math.floor((gx - rect.left) / 44);
+                const row = Math.floor((gy - rect.top) / 44);
+                showPreview(row, col, currentShapes[dragIdx]);
+            }
+        }
+
+        function showPreview(r, c, shape) {
+            if(!shape) return;
+            for(let i=0; i<shape.g.length; i++) {
+                for(let j=0; j<shape.g[i].length; j++) {
+                    if(shape.g[i][j]) {
+                        if(r+i < 8 && c+j < 8) {
+                            const el = document.getElementById(`c-${r+i}-${c+j}`);
+                            if(el) el.classList.add('preview');
+                        }
+                    }
+                }
+            }
+        }
+
+        window.onpointermove = e => {
+            if(dragIdx !== -1) updateGhost(e);
+        };
+
+        window.onpointerup = e => {
+            if(dragIdx === -1) return;
+            
+            const rect = document.getElementById('game-board').getBoundingClientRect();
+            const gx = e.clientX - 20;
+            const gy = e.clientY - 110;
+
+            if(gx > rect.left && gx < rect.right && gy > rect.top && gy < rect.bottom) {
+                const col = Math.floor((gx - rect.left) / 44);
+                const row = Math.floor((gy - rect.top) / 44);
+                
+                if(canPlace(row, col, currentShapes[dragIdx])) {
+                    place(row, col, currentShapes[dragIdx]);
+                    currentShapes[dragIdx] = null;
+                    play(200, 0.15, 'triangle');
+                    checkLines();
+                    if(currentShapes.every(s => s === null)) spawn();
+                }
+            }
+
+            ghost.style.display = 'none';
+            document.getElementById(`shape-${dragIdx}`).classList.remove('dragging');
+            dragIdx = -1;
+            drawBoard();
+            renderInv();
+            checkGameOver();
+        };
+
+        function canPlace(r, c, shape) {
+            for(let i=0; i<shape.g.length; i++) {
+                for(let j=0; j<shape.g[i].length; j++) {
+                    if(shape.g[i][j]) {
+                        if(r+i >= 8 || c+j >= 8 || board[r+i][c+j]) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function place(r, c, shape) {
+            shape.g.forEach((row, i) => row.forEach((v, j) => {
+                if(v) board[r+i][c+j] = shape.c;
+            }));
+            score += 10;
+            updateScore();
+        }
+
+        function checkLines() {
+            let rClear = [], cClear = [];
+            for(let i=0; i<8; i++) if(board[i].every(v => v)) rClear.push(i);
+            for(let j=0; j<8; j++) {
+                let count = 0;
+                for(let i=0; i<8; i++) if(board[i][j]) count++;
+                if(count === 8) cClear.push(j);
+            }
+            
+            if(rClear.length || cClear.length) {
+                play(600, 0.4, 'square');
+                rClear.forEach(r => board[r] = Array(8).fill(null));
+                cClear.forEach(c => board.forEach(r => r[c] = null));
+                score += (rClear.length + cClear.length) * 100;
+                updateScore();
+            }
+        }
+
+        function updateScore() {
+            document.getElementById('score').innerText = score;
+        }
+
+        function checkGameOver() {
+            let possible = false;
+            currentShapes.forEach(shape => {
+                if(!shape) return;
+                for(let r=0; r<8; r++) {
+                    for(let c=0; c<8; c++) {
+                        if(canPlace(r,c,shape)) possible = true;
+                    }
+                }
+            });
+            if(!possible && !currentShapes.every(s => s === null)) {
+                play(100, 1, 'sawtooth');
+                document.getElementById('game-over').style.display = 'flex';
+                document.getElementById('final-score').innerText = `PONTOS: ${score}`;
+            }
+        }
+
+        initBoard();
+        spawn();
+    </script>
+</body>
+</html>

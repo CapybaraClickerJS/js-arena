@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>2048 JS - Com Som</title>
+    <style>
+        :root {
+            --bg-color: #bbada0;
+            --tile-empty: #cdc1b4;
+            --text-dark: #776e65;
+            --text-light: #f9f6f2;
+        }
+        body {
+            background-color: #faf8ef;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            touch-action: none;
+        }
+        .header { width: 340px; display: flex; justify-content: space-between; align-items: center; }
+        .score-container { background: #bbada0; padding: 10px 20px; border-radius: 5px; color: white; text-align: center; min-width: 80px; }
+        
+        #grid {
+            width: 340px;
+            height: 340px;
+            background-color: var(--bg-color);
+            border-radius: 6px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 10px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .tile {
+            width: 72.5px;
+            height: 72.5px;
+            background-color: var(--tile-empty);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--text-dark);
+            transition: all 0.1s ease-in-out;
+        }
+        /* Cores Dinâmicas */
+        .tile[data-value="2"] { background: #eee4da; }
+        .tile[data-value="4"] { background: #ede0c8; }
+        .tile[data-value="8"] { background: #f2b179; color: white; }
+        .tile[data-value="16"] { background: #f59563; color: white; }
+        .tile[data-value="32"] { background: #f67c5f; color: white; }
+        .tile[data-value="64"] { background: #f65e3b; color: white; }
+        .tile[data-value="128"] { background: #edcf72; color: white; font-size: 20px; box-shadow: 0 0 10px #edcf72; }
+        .tile[data-value="256"] { background: #edcc61; color: white; font-size: 20px; }
+        .tile[data-value="512"] { background: #edc850; color: white; font-size: 20px; }
+        .tile[data-value="1024"] { background: #edc53f; color: white; font-size: 16px; }
+        .tile[data-value="2048"] { background: #edc22e; color: white; font-size: 16px; box-shadow: 0 0 15px #edc22e; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>2048</h1>
+        <div class="score-container">Pontos<br><span id="score">0</span></div>
+    </div>
+
+    <div id="grid"></div>
+
+<script>
+    const gridDisplay = document.getElementById('grid');
+    const scoreDisplay = document.getElementById('score');
+    let squares = [];
+    let score = 0;
+
+    // --- MOTOR DE SOM (Web Audio API) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(freq, type = 'sine', duration = 0.1, vol = 0.1) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        
+        gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+    }
+
+    // Criar tabuleiro
+    function createBoard() {
+        for (let i = 0; i < 16; i++) {
+            let tile = document.createElement('div');
+            tile.classList.add('tile');
+            gridDisplay.appendChild(tile);
+            squares.push(tile);
+        }
+        generate();
+        generate();
+    }
+
+    function generate() {
+        let emptySquares = squares.filter(s => s.innerHTML === "");
+        if (emptySquares.length > 0) {
+            let randomTile = emptySquares[Math.floor(Math.random() * emptySquares.length)];
+            randomTile.innerHTML = Math.random() > 0.1 ? 2 : 4;
+            randomTile.setAttribute('data-value', randomTile.innerHTML);
+            checkForGameOver();
+        }
+    }
+
+    // --- MOVIMENTOS ---
+    function moveRight() {
+        for (let i = 0; i < 16; i += 4) {
+            let row = [parseInt(squares[i].innerHTML)||0, parseInt(squares[i+1].innerHTML)||0, parseInt(squares[i+2].innerHTML)||0, parseInt(squares[i+3].innerHTML)||0];
+            let filtered = row.filter(num => num);
+            let newRow = Array(4 - filtered.length).fill("").concat(filtered);
+            for (let j = 0; j < 4; j++) {
+                squares[i+j].innerHTML = newRow[j];
+                squares[i+j].setAttribute('data-value', newRow[j]);
+            }
+        }
+    }
+
+    function moveLeft() {
+        for (let i = 0; i < 16; i += 4) {
+            let row = [parseInt(squares[i].innerHTML)||0, parseInt(squares[i+1].innerHTML)||0, parseInt(squares[i+2].innerHTML)||0, parseInt(squares[i+3].innerHTML)||0];
+            let filtered = row.filter(num => num);
+            let newRow = filtered.concat(Array(4 - filtered.length).fill(""));
+            for (let j = 0; j < 4; j++) {
+                squares[i+j].innerHTML = newRow[j];
+                squares[i+j].setAttribute('data-value', newRow[j]);
+            }
+        }
+    }
+
+    function moveUp() {
+        for (let i = 0; i < 4; i++) {
+            let col = [parseInt(squares[i].innerHTML)||0, parseInt(squares[i+4].innerHTML)||0, parseInt(squares[i+8].innerHTML)||0, parseInt(squares[i+12].innerHTML)||0];
+            let filtered = col.filter(num => num);
+            let newCol = filtered.concat(Array(4 - filtered.length).fill(""));
+            for (let j = 0; j < 4; j++) {
+                squares[i+j*4].innerHTML = newCol[j];
+                squares[i+j*4].setAttribute('data-value', newCol[j]);
+            }
+        }
+    }
+
+    function moveDown() {
+        for (let i = 0; i < 4; i++) {
+            let col = [parseInt(squares[i].innerHTML)||0, parseInt(squares[i+4].innerHTML)||0, parseInt(squares[i+8].innerHTML)||0, parseInt(squares[i+12].innerHTML)||0];
+            let filtered = col.filter(num => num);
+            let newCol = Array(4 - filtered.length).fill("").concat(filtered);
+            for (let j = 0; j < 4; j++) {
+                squares[i+j*4].innerHTML = newCol[j];
+                squares[i+j*4].setAttribute('data-value', newCol[j]);
+            }
+        }
+    }
+
+    // --- COMBINAÇÕES ---
+    function combineRow(reverse = false) {
+        for (let i = 0; i < 15; i++) {
+            if (squares[i].innerHTML !== "" && squares[i].innerHTML === squares[i+1].innerHTML && (i+1)%4 !== 0) {
+                let combined = parseInt(squares[i].innerHTML) * 2;
+                squares[i].innerHTML = combined;
+                squares[i+1].innerHTML = "";
+                score += combined;
+                scoreDisplay.innerHTML = score;
+                playSound(500, 'sine', 0.1); // Som de merge
+            }
+        }
+    }
+
+    function combineCol() {
+        for (let i = 0; i < 12; i++) {
+            if (squares[i].innerHTML !== "" && squares[i].innerHTML === squares[i+4].innerHTML) {
+                let combined = parseInt(squares[i].innerHTML) * 2;
+                squares[i].innerHTML = combined;
+                squares[i+4].innerHTML = "";
+                score += combined;
+                scoreDisplay.innerHTML = score;
+                playSound(500, 'sine', 0.1); // Som de merge
+            }
+        }
+    }
+
+    // --- CONTROLES ---
+    function control(e) {
+        let moved = true;
+        playSound(200, 'triangle', 0.05, 0.05); // Som de deslize
+
+        if(e.keyCode === 39) { moveRight(); combineRow(); moveRight(); }
+        else if(e.keyCode === 37) { moveLeft(); combineRow(); moveLeft(); }
+        else if(e.keyCode === 38) { moveUp(); combineCol(); moveUp(); }
+        else if(e.keyCode === 40) { moveDown(); combineCol(); moveDown(); }
+        else { moved = false; }
+
+        if (moved) generate();
+    }
+    document.addEventListener('keyup', control);
+
+    // Touch Swipe
+    let tsX, tsY;
+    document.addEventListener('touchstart', e => { tsX = e.touches[0].clientX; tsY = e.touches[0].clientY; });
+    document.addEventListener('touchend', e => {
+        let dx = e.changedTouches[0].clientX - tsX;
+        let dy = e.changedTouches[0].clientY - tsY;
+        if (Math.abs(dx) > Math.abs(dy)) {
+            control({keyCode: dx > 0 ? 39 : 37});
+        } else {
+            control({keyCode: dy > 0 ? 40 : 38});
+        }
+    });
+
+    function checkForGameOver() {
+        if (!squares.some(s => s.innerHTML === "")) {
+            playSound(100, 'sawtooth', 0.5);
+            alert("Game Over! Score: " + score);
+        }
+    }
+
+    createBoard();
+</script>
+</body>
+</html>
