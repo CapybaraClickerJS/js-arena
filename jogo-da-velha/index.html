@@ -3,54 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tic-Tac-Toe Ultra | JS Games</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <title>JS Arena | Tic-Tac-Toe Ultra</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --p1-color: #22c55e; --p2-color: #ef4444; --text: #f8fafc; }
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --p1: #22c55e; --p2: #ef4444; --text: #f8fafc; }
         body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        nav { width: 100%; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.8); box-sizing: border-box; }
-        .back-btn { color: var(--accent); text-decoration: none; font-weight: bold; cursor: pointer; }
-        #game-setup { background: var(--card); padding: 20px; border-radius: 15px; margin: 20px 0; width: 90%; max-width: 400px; }
-        select, input { width: 100%; padding: 10px; margin: 10px 0; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; box-sizing: border-box; }
-        .btn-start { width: 100%; padding: 12px; background: var(--accent); border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-start:active { transform: scale(0.95); }
-        #status { font-size: 1.2rem; margin: 15px 0; font-weight: bold; height: 30px; text-align: center; }
+        nav { width: 100%; padding: 15px; background: rgba(30, 41, 59, 0.9); text-align: center; font-weight: bold; border-bottom: 2px solid var(--accent); }
+        #game-setup { background: var(--card); padding: 20px; border-radius: 15px; margin: 20px 0; width: 90%; max-width: 400px; box-shadow: 0 10px 20px rgba(0,0,0,0.4); }
+        select, input { width: 100%; padding: 12px; margin: 8px 0; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; box-sizing: border-box; }
+        .btn-start { width: 100%; padding: 15px; background: var(--accent); border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        #status { font-size: 1.2rem; margin: 15px 0; font-weight: bold; color: #94a3b8; }
         #board { display: grid; grid-template-columns: repeat(3, 100px); grid-template-rows: repeat(3, 100px); gap: 10px; background: #334155; padding: 10px; border-radius: 12px; }
-        .cell { background: var(--card); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 900; cursor: pointer; transition: 0.2s; }
-        .cell.x { color: var(--p1-color); } .cell.o { color: var(--p2-color); }
-        .win { background: #1e293b !important; transform: scale(1.1); box-shadow: 0 0 15px var(--accent); }
+        .cell { background: var(--card); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 900; cursor: pointer; height: 100px; width: 100px; transition: 0.2s; }
+        .cell.x { color: var(--p1); } .cell.o { color: var(--p2); }
+        .win { background: var(--accent) !important; color: white !important; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <nav>
-        <a href="../index.html" class="back-btn">← Voltar</a>
-        <div id="player-id-display" style="font-size: 0.8rem; color: #94a3b8;">ID: #JS-99</div>
-    </nav>
+    <nav>JS ARENA - MULTIPLAYER & BOTS</nav>
+
     <div id="game-setup">
         <h3>Configurar Partida</h3>
-        <select id="mode-select" onchange="toggleBotOptions()">
-            <option value="local">2 Jogadores (Mesma Tela)</option>
-            <option value="bot">Contra Bot (IA)</option>
-            <option value="online">Online (Via ID)</option>
+        
+        <select id="main-mode" onchange="updateMenus()">
+            <option value="local">👥 Jogar Local (2 Players)</option>
+            <option value="online">🌐 Jogar Online (Firebase)</option>
+            <option value="bot">🤖 Jogar contra Bot</option>
         </select>
-        <div id="bot-config" class="hidden">
-            <select id="difficulty-select">
-                <option value="0">Bot Iniciante (Cego)</option>
-                <option value="1">Bot Noob</option>
-                <option value="2">Bot Médio</option>
-                <option value="3">Bot Raivoso</option>
-                <option value="4">Bot Pensativo</option>
-                <option value="5">Bot Impossível (Super Mega IA)</option>
+
+        <div id="bot-selection" class="hidden">
+            <label>Nível do Bot:</label>
+            <select id="bot-level">
+                <option value="iniciante">Bot Iniciante</option>
+                <option value="noob">Bot Noob</option>
+                <option value="medio">Bot Médio</option>
+                <option value="raivoso">Bot Raivoso</option>
+                <option value="pensativo">Bot Pensativo</option>
+                <option value="amigo">Bot Amigo</option>
+                <option value="ganhador">Bot Ganhador</option>
+                <option value="impossivel">Bot Impossível (IA)</option>
             </select>
         </div>
-        <div id="online-config" class="hidden">
-            <input type="text" id="opponent-id" placeholder="ID da Sala">
-            <small style="color: #ef4444; font-size: 0.8rem;">Aviso: Servidor offline no momento.</small>
+
+        <div id="online-selection" class="hidden">
+            <input type="text" id="room-id" placeholder="ID da Sala">
         </div>
+
         <button class="btn-start" onclick="initGame()">INICIAR</button>
     </div>
+
     <div id="status">Aguardando...</div>
+
     <div id="board">
         <div class="cell" data-index="0"></div><div class="cell" data-index="1"></div><div class="cell" data-index="2"></div>
         <div class="cell" data-index="3"></div><div class="cell" data-index="4"></div><div class="cell" data-index="5"></div>
@@ -58,196 +65,216 @@
     </div>
 
     <script>
-        let board = Array(9).fill(""); 
-        let currentPlayer = "X"; 
+        const firebaseConfig = {
+            apiKey: "AIzaSyAYRgdpe0E3j2Nv-I2tFQbgMMFuF1RY8YA",
+            authDomain: "js-arena-online.firebaseapp.com",
+            projectId: "js-arena-online",
+            storageBucket: "js-arena-online.firebasestorage.app",
+            messagingSenderId: "566883970465",
+            appId: "1:566883970465:web:23d28bce1e7ef5ffca6fe0",
+            databaseURL: "https://js-arena-online-default-rtdb.firebaseio.com/"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let board = Array(9).fill("");
+        let currentPlayer = "X";
         let isGameActive = false;
-        let gameMode = "local"; 
-        
-        // Variáveis do modo online (Desativado temporariamente por falta de servidor)
-        let socket, mySymbol, myTurn = false, currentRoom;
+        let gameMode = ""; 
+        let botLevel = "";
+        let mySymbol = "X"; 
+        let currentRoomID = "";
 
         const cells = document.querySelectorAll('.cell');
         const statusText = document.getElementById('status');
 
-        function toggleBotOptions() {
-            const m = document.getElementById('mode-select').value;
-            document.getElementById('bot-config').className = m === 'bot' ? '' : 'hidden';
-            document.getElementById('online-config').className = m === 'online' ? '' : 'hidden';
+        function updateMenus() {
+            const mode = document.getElementById('main-mode').value;
+            document.getElementById('bot-selection').classList.toggle('hidden', mode !== 'bot');
+            document.getElementById('online-selection').classList.toggle('hidden', mode !== 'online');
         }
 
         function initGame() {
-            board = Array(9).fill(""); 
-            currentPlayer = "X"; 
+            gameMode = document.getElementById('main-mode').value;
+            botLevel = document.getElementById('bot-level').value;
+            board = Array(9).fill("");
+            cells.forEach(c => { c.innerText = ""; c.className = 'cell'; });
             isGameActive = true;
-            gameMode = document.getElementById('mode-select').value;
-            
-            cells.forEach(c => { 
-                c.innerText = ""; 
-                c.classList.remove('x', 'o', 'win'); 
-            });
-            
-            if(gameMode === 'online') {
-                statusText.innerText = "Erro: Servidor de salas está offline!";
-                isGameActive = false;
-                // O código Socket.io ficaria aqui, mas o servidor Cloudflare que você usou não existe mais.
+            currentPlayer = "X";
+
+            if (gameMode === 'online') {
+                currentRoomID = document.getElementById('room-id').value;
+                if (!currentRoomID) return alert("ID da sala vazio!");
+                startOnline();
             } else {
-                statusText.innerText = "Vez do X (Humano)";
+                statusText.innerText = "Sua vez! (X)";
             }
         }
 
-        // --- SISTEMA DE CLIQUES (ONDE A MÁGICA ACONTECE) ---
+        // --- TRAVA DE SEGURANÇA NO CLIQUE ---
         cells.forEach(cell => {
             cell.addEventListener('click', () => {
                 const idx = cell.dataset.index;
-                
-                // 1. Se o jogo acabou, ou a célula tá cheia, ignora
-                if(board[idx] !== "" || !isGameActive) return;
-                
-                // 2. Se for modo BOT e for a vez do BOT (O), o humano NÃO PODE CLICAR!
-                if(gameMode === "bot" && currentPlayer === "O") return;
 
-                // 3. O humano joga
-                handleMove(idx);
+                // 1. Não joga se o jogo acabou ou a casa tá ocupada
+                if (!isGameActive || board[idx] !== "") return;
 
-                // 4. Se for contra o bot e o jogo ainda não acabou, manda o bot jogar
-                if(isGameActive && gameMode === "bot" && currentPlayer === "O") {
-                    statusText.innerText = "Bot está pensando...";
-                    
-                    // O "Bot Pensativo" demora mais pra jogar
-                    let level = parseInt(document.getElementById('difficulty-select').value);
-                    let tempoDeEspera = (level === 4) ? 1200 : 500;
-                    
-                    setTimeout(executeBotMove, tempoDeEspera);
+                // 2. Trava Online: Só clica se for o SEU símbolo
+                if (gameMode === "online" && currentPlayer !== mySymbol) return;
+
+                // 3. Trava Bot: Só clica se for a vez do humano (X)
+                if (gameMode === "bot" && currentPlayer !== "X") return;
+
+                executeMove(idx);
+
+                // Se for modo bot e o jogo continuar, chama o bot
+                if (isGameActive && gameMode === "bot" && currentPlayer === "O") {
+                    setTimeout(botPlay, 800);
                 }
             });
         });
 
-        function handleMove(idx) {
-            board[idx] = currentPlayer; 
-            cells[idx].innerText = currentPlayer;
-            cells[idx].classList.add(currentPlayer.toLowerCase());
-            
-            if(checkWinner()) { 
-                statusText.innerText = `O jogador ${currentPlayer} AMASSOU!`; 
-                isGameActive = false; 
-                return; 
-            }
-            if(!board.includes("")) { 
-                statusText.innerText = "Deu Velha! Empate!"; 
-                isGameActive = false; 
-                return; 
-            }
-            
-            currentPlayer = currentPlayer === "X" ? "O" : "X";
-            
-            if (gameMode === "local") {
-                statusText.innerText = `Vez do ${currentPlayer}`;
-            } else if (gameMode === "bot" && currentPlayer === "X") {
-                statusText.innerText = "Sua Vez (X)";
-            }
-        }
+        function executeMove(idx) {
+            board[idx] = currentPlayer;
+            updateDisplay();
+            const win = checkWinVisual();
 
-        function checkWinner() {
-            const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-            return wins.some(p => {
-                if(board[p[0]] && board[p[0]] === board[p[1]] && board[p[0]] === board[p[2]]) {
-                    p.forEach(i => cells[i].classList.add('win')); 
-                    return true;
-                }
-                return false;
-            });
-        }
-
-        // --- INTELIGÊNCIA ARTIFICIAL DOS BOTS (O CÉREBRO) ---
-        function executeBotMove() {
-            if (!isGameActive) return;
-            
-            let level = parseInt(document.getElementById('difficulty-select').value);
-            let available = board.map((val, idx) => val === "" ? idx : null).filter(v => v !== null);
-            
-            if (available.length === 0) return;
-
-            // Chance do bot fazer a jogada PERFEITA (Minimax)
-            let chanceDeAcerto = 0;
-            if (level === 0) chanceDeAcerto = 0;       // Iniciante: 0% inteligência, 100% aleatório
-            else if (level === 1) chanceDeAcerto = 0.2; // Noob: 20% inteligente
-            else if (level === 2) chanceDeAcerto = 0.5; // Médio: 50% inteligente
-            else if (level === 3) chanceDeAcerto = 0.7; // Raivoso: 70% inteligente
-            else if (level === 4) chanceDeAcerto = 0.9; // Pensativo: 90% inteligente (e demora mais)
-            else if (level === 5) chanceDeAcerto = 1.0; // Impossível: 100% inteligência
-
-            let chosenIndex;
-
-            // Rola o "dado" pra ver se ele vai jogar bem ou jogar aleatório
-            if (Math.random() < chanceDeAcerto) {
-                chosenIndex = getBestMove(); // JOGADA INTELIGENTE
+            if (gameMode === "online") {
+                const next = currentPlayer === "X" ? "O" : "X";
+                db.ref('rooms/' + currentRoomID).update({ 
+                    board: board, turn: next, winner: win ? currentPlayer : (board.includes("") ? null : "Empate") 
+                });
             } else {
-                chosenIndex = available[Math.floor(Math.random() * available.length)]; // JOGADA ALEATÓRIA BURRA
+                if (win) {
+                    statusText.innerText = "Vencedor: " + currentPlayer;
+                    isGameActive = false;
+                } else if (!board.includes("")) {
+                    statusText.innerText = "Empate!";
+                    isGameActive = false;
+                } else {
+                    currentPlayer = (currentPlayer === "X") ? "O" : "X";
+                    statusText.innerText = (gameMode === "bot" && currentPlayer === "O") ? "Bot pensando..." : "Vez de: " + currentPlayer;
+                }
             }
-            
-            handleMove(chosenIndex);
         }
-        
-        // Motor de Xadrez versão Jogo da Velha (Sabe todas as jogadas possíveis)
-        function getBestMove() {
-            let bestScore = -Infinity;
+
+        // --- LÓGICA DOS BOTS (8 NÍVEIS) ---
+        function botPlay() {
+            if (!isGameActive) return;
             let move;
+            const available = board.map((v, i) => v === "" ? i : null).filter(v => v !== null);
+
+            // 1. Iniciante / Noob / Amigo (Aleatórios ou Errados)
+            if (botLevel === "iniciante" || botLevel === "noob" || botLevel === "amigo") {
+                move = available[Math.floor(Math.random() * available.length)];
+            } 
+            // 2. Impossível / Ganhador (Minimax Inteligente)
+            else if (botLevel === "impossivel" || botLevel === "ganhador") {
+                move = minimax(board, "O").index;
+            } 
+            // 3. Médio / Pensativo / Raivoso (Busca vitória ou bloqueio)
+            else {
+                move = findSmartMove();
+            }
+
+            if (move !== undefined) executeMove(move);
+        }
+
+        function findSmartMove() {
+            // Tenta ganhar primeiro
             for (let i = 0; i < 9; i++) {
                 if (board[i] === "") {
                     board[i] = "O";
-                    let score = minimax(board, 0, false);
+                    if (checkWinSimple()) { board[i] = ""; return i; }
                     board[i] = "";
-                    if (score > bestScore) {
-                        bestScore = score;
-                        move = i;
+                }
+            }
+            // Bloqueia jogador se não for o bot "Médio" (o médio dá chance)
+            if (botLevel !== "medio") {
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === "") {
+                        board[i] = "X";
+                        if (checkWinSimple()) { board[i] = ""; return i; }
+                        board[i] = "";
                     }
                 }
             }
-            return move;
+            return board[4] === "" ? 4 : board.indexOf("");
         }
 
-        // Algoritmo que prevê o futuro do tabuleiro
-        function minimax(newBoard, depth, isMaximizing) {
-            let result = checkWinnerForMinimax();
-            if (result === "O") return 10 - depth;
-            if (result === "X") return depth - 10;
-            if (result === "tie") return 0;
+        // --- AUXILIARES ---
+        function updateDisplay() {
+            cells.forEach((c, i) => {
+                c.innerText = board[i];
+                c.className = 'cell';
+                if (board[i]) c.classList.add(board[i].toLowerCase());
+            });
+        }
 
-            if (isMaximizing) {
-                let bestScore = -Infinity;
-                for (let i = 0; i < 9; i++) {
-                    if (newBoard[i] === "") {
-                        newBoard[i] = "O";
-                        let score = minimax(newBoard, depth + 1, false);
-                        newBoard[i] = "";
-                        bestScore = Math.max(score, bestScore);
-                    }
+        function checkWinSimple() {
+            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            return lines.some(l => board[l[0]] && board[l[0]] === board[l[1]] && board[l[0]] === board[l[2]]);
+        }
+
+        function checkWinVisual() {
+            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            let win = false;
+            lines.forEach(l => {
+                if (board[l[0]] && board[l[0]] === board[l[1]] && board[l[0]] === board[l[2]]) {
+                    l.forEach(i => cells[i].classList.add('win'));
+                    win = true;
                 }
-                return bestScore;
+            });
+            return win;
+        }
+
+        function minimax(nb, p) {
+            const avail = nb.map((v, i) => v === "" ? i : null).filter(v => v !== null);
+            if (checkWinFor(nb, "X")) return { score: -10 };
+            if (checkWinFor(nb, "O")) return { score: 10 };
+            if (avail.length === 0) return { score: 0 };
+
+            const moves = [];
+            avail.forEach(idx => {
+                const move = { index: idx };
+                nb[idx] = p;
+                move.score = minimax(nb, p === "O" ? "X" : "O").score;
+                nb[idx] = "";
+                moves.push(move);
+            });
+
+            let best;
+            if (p === "O") {
+                let bs = -1000;
+                moves.forEach((m, i) => { if (m.score > bs) { bs = m.score; best = i; } });
             } else {
-                let bestScore = Infinity;
-                for (let i = 0; i < 9; i++) {
-                    if (newBoard[i] === "") {
-                        newBoard[i] = "X";
-                        let score = minimax(newBoard, depth + 1, true);
-                        newBoard[i] = "";
-                        bestScore = Math.min(score, bestScore);
-                    }
-                }
-                return bestScore;
+                let bs = 1000;
+                moves.forEach((m, i) => { if (m.score < bs) { bs = m.score; best = i; } });
             }
+            return moves[best];
         }
 
-        function checkWinnerForMinimax() {
-            const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-            for (let i = 0; i < wins.length; i++) {
-                const [a, b, c] = wins[i];
-                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-                    return board[a];
-                }
-            }
-            if (!board.includes("")) return "tie";
-            return null;
+        function checkWinFor(b, p) {
+            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            return lines.some(l => b[l[0]] === p && b[l[1]] === p && b[l[2]] === p);
+        }
+
+        function startOnline() {
+            const ref = db.ref('rooms/' + currentRoomID);
+            ref.once('value', s => {
+                if (!s.exists() || s.val().winner) {
+                    mySymbol = "X";
+                    ref.set({ board: board, turn: "X", winner: null });
+                } else { mySymbol = "O"; }
+            });
+            ref.on('value', s => {
+                const d = s.val(); if (!d) return;
+                board = d.board; currentPlayer = d.turn;
+                updateDisplay();
+                if (d.winner) { statusText.innerText = "Fim: " + d.winner; isGameActive = false; checkWinVisual(); }
+                else { statusText.innerText = (currentPlayer === mySymbol) ? "SUA VEZ ("+mySymbol+")" : "Oponente ("+currentPlayer+")..."; }
+            });
         }
     </script>
 </body>
